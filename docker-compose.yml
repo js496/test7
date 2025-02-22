@@ -1,0 +1,71 @@
+version: "3.8"
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "8100:8100"
+    volumes:
+      - /path/to/models:/app/model
+    command: ["--model", "/app/model/Mistral-7B-v0.1"] #adjust model name
+  redis:
+    image: redis:latest
+    container_name: container_redis
+    ports:
+      - "6379:6379"
+    environment:
+      - CONTAINER_PORT=6379
+      - HOST_PORT=6379
+    restart: unless-stopped
+  
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "7861:7861"
+    container_name: container_backend
+    environment:
+      - HFTK=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
+      - CONTAINER_PORT=7861
+      - HOST_PORT=7861
+    volumes:
+      - ./backend:/usr/src/app
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/cloud/.cache/huggingface:/root/.cache/huggingface
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "7860:7860"
+    container_name: container_frontend
+    depends_on:
+      - backend
+    environment:
+      - GRADIO_SERVER_NAME=0.0.0.0sudo docker ps -all 
+      - CONTAINER_PORT=7860
+      - HOST_PORT=7860
+    volumes:
+      - ./frontend:/usr/src/app
+      - /home/cloud/.cache/huggingface:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    restart: unless-stopped
